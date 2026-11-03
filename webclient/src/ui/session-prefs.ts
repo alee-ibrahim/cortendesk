@@ -48,10 +48,11 @@ export type SessionPrefs = {
   extraKeys: boolean;
   /** Short vibration on long-press, modifier lock and mode change (Android). */
   haptics: boolean;
-  /** Floating session controls (phones, tablets): screen edge, top as a fraction of the free height, unfolded. */
-  pillSide: 'left' | 'right';
-  pillY: number;
-  pillOpen: boolean;
+  /** Docked session controls (phones, tablets): the edge per orientation. */
+  barPortrait: 'top' | 'bottom';
+  barLandscape: 'left' | 'right';
+  /** In landscape, the Keyboard button opens the compact in-page keyboard instead of the phone's. */
+  compactKeyboard: boolean;
 };
 
 export const INPUT_MODES = ['auto', 'pointer', 'touch', 'trackpad'] as const;
@@ -84,9 +85,9 @@ export const DEFAULT_PREFS: Readonly<SessionPrefs> = Object.freeze({
   inputMode: 'auto',
   extraKeys: false,
   haptics: true,
-  pillSide: 'right',
-  pillY: 0.25,
-  pillOpen: true,
+  barPortrait: 'bottom',
+  barLandscape: 'right',
+  compactKeyboard: false,
 });
 
 export const PREFS_KEY = 'cortendesk.rdprefs.v1';
@@ -140,9 +141,9 @@ export function validatePrefs(raw: unknown): SessionPrefs {
       : d.inputMode,
     extraKeys: bool(r.extraKeys, d.extraKeys),
     haptics: bool(r.haptics, d.haptics),
-    pillSide: r.pillSide === 'left' || r.pillSide === 'right' ? r.pillSide : d.pillSide,
-    pillY: typeof r.pillY === 'number' && Number.isFinite(r.pillY) && r.pillY >= 0 && r.pillY <= 1 ? r.pillY : d.pillY,
-    pillOpen: bool(r.pillOpen, d.pillOpen),
+    barPortrait: r.barPortrait === 'top' || r.barPortrait === 'bottom' ? r.barPortrait : d.barPortrait,
+    barLandscape: r.barLandscape === 'left' || r.barLandscape === 'right' ? r.barLandscape : d.barLandscape,
+    compactKeyboard: bool(r.compactKeyboard, d.compactKeyboard),
   };
 }
 
