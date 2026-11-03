@@ -3,6 +3,15 @@
 // (the page records them before they get here).
 self.onmessage = (e) => {
   const cmd = e.data;
+  // Test hooks: the connection dies (as on a Windows sign-in), or the host closes it on purpose.
+  if (cmd.c === '__drop') {
+    self.postMessage({ t: 'state', state: 'error', detail: 'Connection lost (relay)' });
+    return;
+  }
+  if (cmd.c === '__peerclose') {
+    self.postMessage({ t: 'state', state: 'closed', detail: 'Closed manually by the peer', peerInitiated: true });
+    return;
+  }
   if (cmd.c !== 'connect') return;
   const canvas = cmd.canvas;
   if (canvas) paint(canvas);

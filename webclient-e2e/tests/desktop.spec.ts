@@ -10,7 +10,7 @@ test('desktop layout is unchanged: top bar and dock, no phone controls', async (
   await expect(page.locator('#rd-root')).not.toHaveClass(/rd-mobile/);
   await expect(page.locator('#rd-toolbar')).toBeVisible();
   await expect(page.locator('#rd-dock')).toBeVisible();
-  await expect(page.locator('#rd-pill')).toHaveCount(0);
+  await expect(page.locator('#rd-mbar')).toHaveCount(0);
   await expect(page.locator('#rd-btn-kbd')).toBeHidden();
   await expect(page.locator('#rd-btn-xkeys')).toBeHidden();
   await expect(page.locator('#rd-xkeys')).toBeHidden();

@@ -5,10 +5,17 @@ test.beforeEach(({}, info) => {
   test.skip(info.project.name === 'desktop', 'phone / tablet only');
 });
 
-test('phone layout: floating controls replace the top bar and dock', async ({ page }, info) => {
+test('phone layout: docked controls replace the top bar and dock, never cover the screen', async ({ page }, info) => {
   await connect(page);
   await expect(page.locator('#rd-root')).toHaveClass(/rd-mobile/);
-  await expect(page.locator('#rd-pill')).toBeVisible();
+  await expect(page.locator('#rd-mbar')).toBeVisible();
+  await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'bottom');
+  const noOverlap = () => page.evaluate(() => {
+    const a = document.querySelector('#rd-mbar')!.getBoundingClientRect();
+    const b = document.querySelector('#rd-viewport')!.getBoundingClientRect();
+    return a.right <= b.left + 0.5 || a.left >= b.right - 0.5 || a.bottom <= b.top + 0.5 || a.top >= b.bottom - 0.5;
+  });
+  expect(await noOverlap()).toBe(true);
   await expect(page.locator('#rd-toolbar')).toBeHidden();
   await expect(page.locator('#rd-dock')).toBeHidden();
   const overscroll = await page.evaluate(() => getComputedStyle(document.body).overscrollBehaviorY);
@@ -17,7 +24,9 @@ test('phone layout: floating controls replace the top bar and dock', async ({ pa
   const vp = page.viewportSize()!;
   await page.setViewportSize({ width: vp.height, height: vp.width });
   await page.waitForTimeout(300);
-  await expect(page.locator('#rd-pill')).toBeInViewport();
+  await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'right');
+  expect(await noOverlap()).toBe(true);
+  await expect(page.locator('#rd-mbar [data-mbar="disconnect"]')).toBeInViewport();
   await page.screenshot({ path: info.outputPath('landscape.png') });
 });
 
@@ -94,7 +103,7 @@ test('pinch zooms the remote screen, not the page; taps still map exactly', asyn
 
 test('on-screen keyboard: Android-style 229 + input sends Thaana and emoji as text', async ({ page }) => {
   await connect(page);
-  await page.locator('#rd-pill [data-pill="kbd"]').click();
+  await page.locator('#rd-mbar [data-mbar="kbd"]').click();
   await expect(page.locator('#rd-kbd-sink')).toBeFocused();
   await page.evaluate(() => {
     const sink = document.querySelector<HTMLTextAreaElement>('#rd-kbd-sink')!;
@@ -124,7 +133,7 @@ test('on-screen keyboard: Android-style 229 + input sends Thaana and emoji as te
 
 test('extra keys: Win+R reaches the host as Map-mode key down/up', async ({ page }) => {
   await connect(page);
-  await page.locator('#rd-pill [data-pill="xkeys"]').click();
+  await page.locator('#rd-mbar [data-mbar="xkeys"]').click();
   await expect(page.locator('#rd-xkeys')).toBeVisible();
   await page.locator('#rd-xkeys .rd-xk-page').click(); // F-keys
   await page.locator('#rd-xkeys .rd-xk-page').click(); // combos
@@ -138,7 +147,7 @@ test('extra keys: Win+R reaches the host as Map-mode key down/up', async ({ page
 
 test('sticky Ctrl applies to the next click only', async ({ page }) => {
   await connect(page);
-  await page.locator('#rd-pill [data-pill="xkeys"]').click();
+  await page.locator('#rd-mbar [data-mbar="xkeys"]').click();
   await page.locator('#rd-xkeys [data-xk="ctrl"]').click();
   await expect(page.locator('#rd-xkeys [data-xk="ctrl"]')).toHaveAttribute('data-latch', 'once');
   const p = await clientFor(page, 300, 300);
@@ -150,7 +159,7 @@ test('sticky Ctrl applies to the next click only', async ({ page }) => {
 
 test('trackpad mode: slide moves a local cursor, tap clicks there', async ({ page }) => {
   await connect(page);
-  await page.locator('#rd-pill [data-pill="mode"]').click();
+  await page.locator('#rd-mbar [data-mbar="mode"]').click();
   await page.locator('.rd-pop [data-action="input:trackpad"]').click();
   await expect(page.locator('#rd-tp-cursor')).toBeVisible();
   const a = await clientFor(page, 960, 540);
@@ -165,18 +174,56 @@ test('trackpad mode: slide moves a local cursor, tap clicks there', async ({ pag
   expect(m[1]![2]).toBeGreaterThan(960); // at the cursor, not at the finger (top-left)
 });
 
-test('pill position and input mode survive a reload', async ({ page }) => {
+test('bar side (per orientation) and input mode survive a reload', async ({ page }) => {
   await connect(page);
-  const handle = page.locator('#rd-pill .rd-pill-handle');
-  const box = (await handle.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await handle.dispatchEvent('pointerdown', { pointerId: 1, clientX: box.x + 20, clientY: box.y + 10 });
-  await handle.dispatchEvent('pointermove', { pointerId: 1, clientX: 30, clientY: box.y + 120 });
-  await handle.dispatchEvent('pointerup', { pointerId: 1, clientX: 30, clientY: box.y + 120 });
-  await expect(page.locator('#rd-pill')).toHaveAttribute('data-side', 'left');
-  await page.locator('#rd-pill [data-pill="mode"]').click();
+  await page.locator('#rd-mbar [data-mbar="swap"]').click();
+  await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'top');
+  await page.locator('#rd-mbar [data-mbar="mode"]').click();
   await page.locator('.rd-pop [data-action="input:trackpad"]').click();
   await connect(page);
-  await expect(page.locator('#rd-pill')).toHaveAttribute('data-side', 'left');
+  await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'top');
   await expect(page.locator('#rd-tp-cursor')).toBeVisible();
+});
+
+test('a dropped connection reconnects by itself and keeps the zoom', async ({ page }) => {
+  await connect(page);
+  await page.locator('#rd-mbar [data-mbar="zoom"]').click();
+  await page.locator('.rd-pop [data-action="fit:actual"]').click();
+  const zoomed = await page.evaluate(() => document.querySelector<HTMLElement>('#rd-viewport canvas')!.style.transform);
+  expect(zoomed).toContain('scale');
+  await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__drop' }));
+  await expect(page.locator('#rd-overlay-status-text')).toBeVisible();
+  await expect(page.locator('#rd-root')).toHaveAttribute('data-state', 'streaming', { timeout: 10_000 });
+  expect(await page.evaluate(() => (window as unknown as { __connects: number }).__connects)).toBe(2);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => document.querySelector<HTMLElement>('#rd-viewport canvas')!.style.transform)).toBe(zoomed);
+});
+
+test('a close the host announced (close_reason) does not reconnect', async ({ page }) => {
+  await connect(page);
+  await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__peerclose' }));
+  await expect(page.locator('#rd-root')).not.toHaveAttribute('data-state', 'streaming');
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => (window as unknown as { __connects: number }).__connects)).toBe(1);
+});
+
+test('landscape: compact keyboard (opt-in) types text and fits the picture above it', async ({ page }, info) => {
+  test.skip(info.project.name === 'ipad', 'phone landscape');
+  const vp = page.viewportSize()!;
+  await page.setViewportSize({ width: Math.max(vp.width, vp.height), height: Math.min(vp.width, vp.height) });
+  await page.addInitScript(() => localStorage.setItem('cortendesk.rdprefs.v1', JSON.stringify({ compactKeyboard: true })));
+  await connect(page);
+  await page.locator('#rd-mbar [data-mbar="kbd"]').click();
+  await expect(page.locator('#rd-ckbd')).toBeVisible();
+  const h = await page.evaluate(() => document.querySelector('#rd-ckbd')!.getBoundingClientRect().height / window.innerHeight);
+  expect(h).toBeLessThanOrEqual(0.45);
+  await page.locator('#rd-ckbd button', { hasText: /^h$/ }).dispatchEvent('pointerdown');
+  await page.locator('#rd-ckbd button', { hasText: /^i$/ }).dispatchEvent('pointerdown');
+  await page.locator('#rd-ckbd .rd-ck-bksp').dispatchEvent('pointerdown');
+  await page.locator('#rd-ckbd .rd-ck-bksp').dispatchEvent('pointerup');
+  const c = (await cmds(page)).filter((x) => x.c === 'text' || x.c === 'key');
+  expect(c.slice(0, 2)).toEqual([{ c: 'text', text: 'h' }, { c: 'text', text: 'i' }]);
+  expect(c[2]).toMatchObject({ c: 'key', keyKind: 'control', press: true });
+  await page.locator('#rd-ckbd .rd-ck-hide').dispatchEvent('pointerdown');
+  await expect(page.locator('#rd-ckbd')).toBeHidden();
 });

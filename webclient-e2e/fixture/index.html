@@ -16,8 +16,11 @@
     <script>
         // Record every command the page sends to the session worker.
         window.__cmds = [];
+        window.__connects = 0;
         const post = Worker.prototype.postMessage;
         Worker.prototype.postMessage = function (msg, transfer) {
+            window.__worker = this;
+            if (msg && msg.c === 'connect') window.__connects++;
             const copy = { ...msg };
             delete copy.canvas;
             if (copy.c !== 'connect') window.__cmds.push(copy);
