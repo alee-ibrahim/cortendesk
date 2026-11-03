@@ -1,0 +1,87 @@
+# Fork-only workflow (not part of any upstream PR): tests the patched branch
+# and, for a v*-webautofill.* tag, publishes the image to
+# ghcr.io/<owner>/cortendesk. Upstream's docker-release.yml is left alone.
+#
+# Actions are pinned to the same commit SHAs upstream uses.
+name: Fork build
+
+on:
+  push:
+    branches: [webautofill]
+    tags: ['v*-webautofill.*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          extensions: pdo_sqlite, bcmath, intl
+          tools: composer
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate --ansi
+      - run: php artisan lang:check
+      - run: vendor/bin/pint --test app/Services/WebClientAddressBookPassword.php app/Http/Controllers/WebClientPasswordController.php app/Http/Controllers/WebClientPageController.php routes/web.php config/cortendesk.php tests
+      - run: vendor/bin/pest
+
+  webclient:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webclient
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npx vitest run
+      # The bundle is committed: rebuilding must reproduce it byte for byte.
+      - run: npm run build
+      - run: git diff --exit-code -- ../public/rdclient
+
+  image:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [php, webclient]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
