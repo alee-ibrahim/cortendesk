@@ -31,7 +31,7 @@ jobs:
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.example .env && php artisan key:generate --ansi
       - run: php artisan lang:check
-      - run: vendor/bin/pint --test app/Services/WebClientAddressBookPassword.php app/Http/Controllers/WebClientPasswordController.php app/Http/Controllers/WebClientPageController.php routes/web.php config/cortendesk.php tests
+      - run: vendor/bin/pint --test app/Services/WebClientAddressBookPassword.php app/Http/Controllers/WebClientPasswordController.php app/Http/Controllers/WebClientPageController.php app/Support/AuditLogStream.php app/Providers/AppServiceProvider.php app/Models/AuditConnection.php app/Http/Middleware/ApiTokenCan.php routes/web.php config tests
       - run: vendor/bin/pest
 
   webclient:
