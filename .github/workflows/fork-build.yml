@@ -53,9 +53,38 @@ jobs:
       - run: npm run build
       - run: git diff --exit-code -- ../public/rdclient
 
+  # The built client on phone, tablet and desktop browsers, against a mock
+  # session worker (webclient-e2e/, fork-only).
+  e2e:
+    needs: [webclient]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webclient-e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test
+        env:
+          CI: '1'
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: webclient-e2e
+          path: |
+            webclient-e2e/playwright-report
+            webclient-e2e/test-results
+          retention-days: 14
+
   image:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [php, webclient]
+    needs: [php, webclient, e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read
