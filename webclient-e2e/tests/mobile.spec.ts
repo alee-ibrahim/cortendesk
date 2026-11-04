@@ -27,6 +27,7 @@ test('phone layout: docked controls replace the top bar and dock, never cover th
   await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'right');
   expect(await noOverlap()).toBe(true);
   await expect(page.locator('#rd-mbar [data-mbar="disconnect"]')).toBeInViewport();
+  await expect(page.locator('#rd-mbar [data-mbar="more"]')).toBeInViewport();
   await page.screenshot({ path: info.outputPath('landscape.png') });
 });
 
@@ -160,7 +161,6 @@ test('sticky Ctrl applies to the next click only', async ({ page }) => {
 test('trackpad mode: slide moves a local cursor, tap clicks there', async ({ page }) => {
   await connect(page);
   await page.locator('#rd-mbar [data-mbar="mode"]').click();
-  await page.locator('.rd-pop [data-action="input:trackpad"]').click();
   await expect(page.locator('#rd-tp-cursor')).toBeVisible();
   const a = await clientFor(page, 960, 540);
   await touch(page, [['pointerdown', 1, a.x, a.y], ['pointermove', 1, a.x + 15, a.y], ['pointermove', 1, a.x + 30, a.y], ['pointerup', 1, a.x + 30, a.y]]);
@@ -176,10 +176,10 @@ test('trackpad mode: slide moves a local cursor, tap clicks there', async ({ pag
 
 test('bar side (per orientation) and input mode survive a reload', async ({ page }) => {
   await connect(page);
-  await page.locator('#rd-mbar [data-mbar="swap"]').click();
+  await page.locator('#rd-mbar [data-mbar="more"]').click();
+  await page.locator('.rd-sheet [data-tile="swap"]').click();
   await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'top');
   await page.locator('#rd-mbar [data-mbar="mode"]').click();
-  await page.locator('.rd-pop [data-action="input:trackpad"]').click();
   await connect(page);
   await expect(page.locator('#rd-root')).toHaveAttribute('data-bar', 'top');
   await expect(page.locator('#rd-tp-cursor')).toBeVisible();
@@ -188,7 +188,7 @@ test('bar side (per orientation) and input mode survive a reload', async ({ page
 test('a dropped connection reconnects by itself and keeps the zoom', async ({ page }) => {
   await connect(page);
   await page.locator('#rd-mbar [data-mbar="zoom"]').click();
-  await page.locator('.rd-pop [data-action="fit:actual"]').click();
+  await expect(page.locator('#rd-mbar [data-mbar="zoom"]')).toHaveAttribute('aria-pressed', 'true');
   const zoomed = await page.evaluate(() => document.querySelector<HTMLElement>('#rd-viewport canvas')!.style.transform);
   expect(zoomed).toContain('scale');
   await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__drop' }));
@@ -226,4 +226,53 @@ test('landscape: compact keyboard (opt-in) types text and fits the picture above
   expect(c[2]).toMatchObject({ c: 'key', keyKind: 'control', press: true });
   await page.locator('#rd-ckbd .rd-ck-hide').dispatchEvent('pointerdown');
   await expect(page.locator('#rd-ckbd')).toBeHidden();
+});
+
+test('bar keeps only the essentials; the rest is in the More sheet', async ({ page }) => {
+  await connect(page);
+  const visible = await page.locator('#rd-mbar button:visible').evaluateAll((bs) => bs.map((b) => (b as HTMLElement).dataset.mbar));
+  expect(visible).toEqual(['kbd', 'xkeys', 'mode', 'zoom', 'more', 'disconnect']); // one monitor: no monitor button
+  for (const b of await page.locator('#rd-mbar button:visible').all()) {
+    const box = (await b.boundingBox())!;
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(38);
+  }
+  await page.locator('#rd-mbar [data-mbar="more"]').click();
+  const sheet = page.locator('.rd-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toHaveAttribute('data-sheet', 'bottom');
+  for (const id of ['clipboard', 'files', 'chat', 'details', 'viewonly', 'swap']) {
+    await expect(sheet.locator(`[data-tile="${id}"]`)).toBeVisible();
+  }
+  await expect(sheet.locator('[data-action="opt:pointer"]')).toBeVisible();
+  await expect(sheet.locator('[data-action="opt:suggestions"]')).toBeVisible();
+  // The sheet does not cover the bar.
+  const s = (await sheet.boundingBox())!;
+  const bar = (await page.locator('#rd-mbar').boundingBox())!;
+  expect(s.y + s.height).toBeLessThanOrEqual(bar.y + 1);
+  await sheet.locator('[data-tile="viewonly"]').click();
+  await page.locator('#rd-mbar [data-mbar="more"]').click();
+  await expect(page.locator('.rd-sheet [data-tile="viewonly"]')).toHaveClass(/rd-on/);
+});
+
+test('landscape: the More sheet opens beside the bar', async ({ page }) => {
+  const vp = page.viewportSize()!;
+  await page.setViewportSize({ width: Math.max(vp.width, vp.height), height: Math.min(vp.width, vp.height) });
+  await connect(page);
+  await page.locator('#rd-mbar [data-mbar="more"]').click();
+  await expect(page.locator('.rd-sheet')).toHaveAttribute('data-sheet', 'right');
+  const s = (await page.locator('.rd-sheet').boundingBox())!;
+  const bar = (await page.locator('#rd-mbar').boundingBox())!;
+  expect(s.x + s.width).toBeLessThanOrEqual(bar.x + 1);
+});
+
+test('keyboard field asks for no suggestions by default; the option turns them back on', async ({ page }) => {
+  await connect(page);
+  const attrs = () => page.evaluate(() => {
+    const t = document.querySelector('#rd-kbd-sink')!;
+    return ['autocorrect', 'spellcheck', 'autocomplete', 'autocapitalize', 'writingsuggestions', 'inputmode'].map((a) => t.getAttribute(a));
+  });
+  expect(await attrs()).toEqual(['off', 'false', 'off', 'off', 'false', 'text']);
+  await page.locator('#rd-mbar [data-mbar="more"]').click();
+  await page.locator('.rd-sheet [data-action="opt:suggestions"]').click();
+  expect(await attrs()).toEqual(['on', 'true', 'off', 'off', 'true', 'text']);
 });
