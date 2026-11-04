@@ -46,3 +46,13 @@ test('Type sends text as seq', async ({ page }) => {
   await page.locator('#rd-type-send').click();
   expect((await cmds(page)).filter((c) => c.c === 'text')).toEqual([{ c: 'text', text: 'héllo ދިވެހި' }]);
 });
+
+test('desktop: a host UAC report does not change typing', async ({ page }) => {
+  await connect(page);
+  await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__uac', on: true }));
+  await expect(page.locator('#rd-keys-chip')).toBeHidden();
+  await page.locator('#rd-btn-type').click();
+  await page.locator('#rd-type-text').fill('ok');
+  await page.locator('#rd-type-send').click();
+  expect((await cmds(page)).filter((c) => c.c === 'text')).toEqual([{ c: 'text', text: 'ok' }]);
+});

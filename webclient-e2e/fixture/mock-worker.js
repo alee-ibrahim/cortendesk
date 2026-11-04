@@ -8,6 +8,10 @@ self.onmessage = (e) => {
     self.postMessage({ t: 'state', state: 'error', detail: 'Connection lost (relay)' });
     return;
   }
+  if (cmd.c === '__uac') {
+    self.postMessage({ t: 'uac', on: cmd.on });
+    return;
+  }
   if (cmd.c === '__peerclose') {
     self.postMessage({ t: 'state', state: 'closed', detail: 'Closed manually by the peer', peerInitiated: true });
     return;

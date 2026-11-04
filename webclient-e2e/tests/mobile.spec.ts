@@ -290,3 +290,57 @@ test('Fullscreen on the bar: toggles, or explains Add to Home Screen where there
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
   await expect(page.locator('#rd-mbar [data-mbar="fullscreen"]')).toHaveAttribute('aria-pressed', 'true');
 });
+
+async function androidType(page: import('@playwright/test').Page, text: string): Promise<void> {
+  await page.evaluate((text) => {
+    const sink = document.querySelector<HTMLTextAreaElement>('#rd-kbd-sink')!;
+    sink.value = sink.value + text;
+    sink.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
+  }, text);
+}
+
+test('Type as key presses: phone keyboard text goes as scancodes, Thaana is skipped', async ({ page }) => {
+  await connect(page);
+  await page.locator('#rd-mbar [data-mbar="more"]').click();
+  await page.locator('.rd-sheet [data-action="opt:typeKeys"]').click();
+  await expect(page.locator('#rd-keys-chip')).toBeVisible();
+  await page.locator('#rd-mbar [data-mbar="kbd"]').click();
+  await androidType(page, 'P');
+  await androidType(page, 'ދ');
+  const c = (await cmds(page)).filter((x) => x.c === 'key' || x.c === 'text');
+  expect(c.some((x) => x.c === 'text')).toBe(false);
+  expect(c.map((k) => [k.keyKind, k.value, k.down])).toEqual([
+    ['map', 0x2a, true], ['map', 0x19, true], ['map', 0x19, false], ['map', 0x2a, false],
+  ]);
+  await expect(page.locator('#rd-toast')).toContainText('1');
+  await page.locator('#rd-keys-chip').click();
+  await expect(page.locator('#rd-keys-chip')).toBeHidden();
+  await clearCmds(page);
+  await androidType(page, 'x');
+  expect((await cmds(page)).filter((x) => x.c === 'text')).toEqual([{ c: 'text', text: 'x' }]);
+});
+
+test('a host that reports UAC switches typing to key presses while it lasts', async ({ page }) => {
+  await connect(page);
+  await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__uac', on: true }));
+  await expect(page.locator('#rd-keys-chip')).toBeVisible();
+  await page.locator('#rd-mbar [data-mbar="kbd"]').click();
+  await androidType(page, 'a');
+  expect((await cmds(page)).filter((x) => x.c === 'text')).toEqual([]);
+  await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__uac', on: false }));
+  await expect(page.locator('#rd-keys-chip')).toBeHidden();
+  await clearCmds(page);
+  await androidType(page, 'a');
+  expect((await cmds(page)).filter((x) => x.c === 'text')).toEqual([{ c: 'text', text: 'a' }]);
+});
+
+test('after an automatic reconnect, typing as key presses is offered', async ({ page }) => {
+  await connect(page);
+  await page.evaluate(() => (window as unknown as { __worker: Worker }).__worker.postMessage({ c: '__drop' }));
+  await expect(page.locator('#rd-root')).toHaveAttribute('data-state', 'streaming', { timeout: 10_000 });
+  const chip = page.locator('#rd-keys-chip');
+  await expect(chip).toBeVisible();
+  await expect(chip).toHaveAttribute('data-kind', 'offer');
+  await chip.click();
+  await expect(chip).toHaveAttribute('data-kind', 'active');
+});
