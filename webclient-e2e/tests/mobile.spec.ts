@@ -231,7 +231,7 @@ test('landscape: compact keyboard (opt-in) types text and fits the picture above
 test('bar keeps only the essentials; the rest is in the More sheet', async ({ page }) => {
   await connect(page);
   const visible = await page.locator('#rd-mbar button:visible').evaluateAll((bs) => bs.map((b) => (b as HTMLElement).dataset.mbar));
-  expect(visible).toEqual(['kbd', 'xkeys', 'mode', 'zoom', 'more', 'disconnect']); // one monitor: no monitor button
+  expect(visible).toEqual(['kbd', 'xkeys', 'mode', 'zoom', 'fullscreen', 'more', 'disconnect']); // one monitor: no monitor button
   for (const b of await page.locator('#rd-mbar button:visible').all()) {
     const box = (await b.boundingBox())!;
     expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(38);
@@ -275,4 +275,18 @@ test('keyboard field asks for no suggestions by default; the option turns them b
   await page.locator('#rd-mbar [data-mbar="more"]').click();
   await page.locator('.rd-sheet [data-action="opt:suggestions"]').click();
   expect(await attrs()).toEqual(['on', 'true', 'off', 'off', 'true', 'text']);
+});
+
+test('Fullscreen on the bar: toggles, or explains Add to Home Screen where there is no fullscreen', async ({ page }) => {
+  await connect(page);
+  const enabled = await page.evaluate(() => document.fullscreenEnabled === true);
+  await expect(page.locator('.rd-sheet [data-tile="fullscreen"]')).toHaveCount(0);
+  if (!enabled) {
+    await page.locator('#rd-mbar [data-mbar="fullscreen"]').click();
+    await expect(page.locator('#rd-toast')).toContainText('Home Screen');
+    return;
+  }
+  await page.locator('#rd-mbar [data-mbar="fullscreen"]').click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  await expect(page.locator('#rd-mbar [data-mbar="fullscreen"]')).toHaveAttribute('aria-pressed', 'true');
 });
