@@ -110,4 +110,19 @@ describe('ViewTransformer', () => {
     v.fillWidth(); // already wider than needed: unchanged
     expect(v.view.scale).toBe(before);
   });
+
+  it('keepInView pans only by the overflow, and is stable (no oscillation)', () => {
+    const v = new ViewTransformer();
+    v.setGeometry(400, 800, 16 / 9);
+    v.zoomAt(4, 0, 400);
+    const t0 = v.view.tx;
+    // a point 10 px past the right edge (margin 40): the view moves 50 px, not half a screen
+    const s = v.view.scale;
+    const px = (400 - t0 + 10) / s;
+    expect(v.keepInView(px, 400 / s, 40)).toBe(true);
+    expect(v.view.tx).toBeCloseTo(t0 - 50, 6);
+    const t1 = v.view.tx;
+    expect(v.keepInView(px, 400 / s, 40)).toBe(false);
+    expect(v.view.tx).toBe(t1);
+  });
 });

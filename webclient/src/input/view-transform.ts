@@ -136,6 +136,27 @@ export class ViewTransformer {
     return this.v.tx !== before.tx || this.v.ty !== before.ty;
   }
 
+  /**
+   * Keep a moving point (the trackpad cursor) inside the visible area minus
+   * `margin` by panning just enough, never by re-centring: edge scrolling,
+   * smooth, and stable when called again with the same point. True when
+   * the view moved.
+   */
+  keepInView(px: number, py: number, margin = 40): boolean {
+    const before = this.v;
+    const s = this.v.scale;
+    const sx = this.v.tx + px * s;
+    const sy = this.v.ty + py * s;
+    let { tx, ty } = this.v;
+    if (sx < margin) tx += margin - sx;
+    else if (sx > this.vw - margin) tx -= sx - (this.vw - margin);
+    if (sy < margin) ty += margin - sy;
+    else if (sy > this.vh - margin) ty -= sy - (this.vh - margin);
+    this.v = { scale: s, tx, ty };
+    this.clamp();
+    return this.v.tx !== before.tx || this.v.ty !== before.ty;
+  }
+
   /** Element-local (untransformed) point -> viewport point. */
   toScreen(px: number, py: number): { x: number; y: number } {
     return { x: this.v.tx + px * this.v.scale, y: this.v.ty + py * this.v.scale };

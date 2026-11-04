@@ -419,6 +419,10 @@
 #rd-tp-cursor[hidden] {
   display: none;
 }
+#rd-tp-cursor.rd-faded {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
 
 /* The field the on-screen keyboard types into (app.ts setupSoftKeyboard).
    Focusable but invisible; 16px so iOS does not zoom the page to it. */
