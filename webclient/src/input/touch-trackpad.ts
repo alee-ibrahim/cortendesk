@@ -30,8 +30,18 @@ export const TAP_HOLD_MS = 250;
 export type TrackpadHooks = {
   /** Where the remote image is on screen now (client coordinates). */
   content(): Rect;
-  /** The local cursor moved: draw it, and keep it in view when zoomed. */
-  cursor(at: Pt): void;
+  /**
+   * The local cursor moved: draw it. `byCursor`: the finger moved the
+   * cursor, so a zoomed view may scroll to keep it in sight. False when the
+   * view itself moved (pinch / pan): the user's pan always wins.
+   */
+  cursor(at: Pt, byCursor: boolean): void;
+  /**
+   * The nearest point to `at` that is on screen. A cursor left off-screen by
+   * a pan is brought to the edge of what the user is looking at before it
+   * moves, instead of the view jumping back to it.
+   */
+  clampToView?(at: Pt): Pt;
 };
 
 export class TrackpadMapper implements GestureMapper {
@@ -60,7 +70,7 @@ export class TrackpadMapper implements GestureMapper {
   place(fx: number, fy: number): void {
     this.fx = clamp01(fx);
     this.fy = clamp01(fy);
-    this.hooks.cursor(this.position());
+    this.hooks.cursor(this.position(), false);
   }
 
   handle(e: GestureEvent): void {
@@ -134,7 +144,7 @@ export class TrackpadMapper implements GestureMapper {
       case 'pinch':
         this.flushTap();
         o.zoom(e.scale, e.center, e.pan);
-        this.hooks.cursor(this.position());
+        this.hooks.cursor(this.position(), false);
         return;
       case 'idle':
         this.scroll.reset();
@@ -160,12 +170,18 @@ export class TrackpadMapper implements GestureMapper {
   private moveBy(dx: number, dy: number): void {
     const r = this.hooks.content();
     if (r.width <= 0 || r.height <= 0) return;
+    const here = this.position();
+    const seen = this.hooks.clampToView?.(here);
+    if (seen && (seen.x !== here.x || seen.y !== here.y)) {
+      this.fx = clamp01((seen.x - r.x) / r.width);
+      this.fy = clamp01((seen.y - r.y) / r.height);
+    }
     const g = trackpadGain(Math.hypot(dx, dy));
     this.fx = clamp01(this.fx + (dx * g) / r.width);
     this.fy = clamp01(this.fy + (dy * g) / r.height);
     const p = this.position();
     this.out.mouse('move', 0, p);
-    this.hooks.cursor(p);
+    this.hooks.cursor(p, true);
   }
 
   private click(button: number): void {

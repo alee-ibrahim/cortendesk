@@ -13,10 +13,19 @@ function rig() {
     zoom: () => calls.push('zoom'),
   };
   const cursor: { x: number; y: number }[] = [];
+  const follow: boolean[] = [];
+  const view = { clamp: undefined as undefined | ((p: { x: number; y: number }) => { x: number; y: number }) };
   // Remote image fills a 1000 x 500 area at (0, 0).
-  const tp = new TrackpadMapper(out, { content: () => ({ x: 0, y: 0, width: 1000, height: 500 }), cursor: (p) => cursor.push(p) });
+  const tp = new TrackpadMapper(out, {
+    content: () => ({ x: 0, y: 0, width: 1000, height: 500 }),
+    cursor: (p, byCursor) => {
+      cursor.push(p);
+      follow.push(byCursor);
+    },
+    clampToView: (p) => (view.clamp ? view.clamp(p) : p),
+  });
   const g = new GestureRecognizer((e) => tp.handle(e));
-  return { calls, cursor, tp, g };
+  return { calls, cursor, follow, view, tp, g };
 }
 
 describe('trackpadGain', () => {
@@ -103,5 +112,32 @@ describe('TrackpadMapper', () => {
     g.up(1, 100, 100, 50);
     g.down(2, 800, 400, 120); // far away: not a double tap
     expect(calls.filter((c) => c.startsWith('down')).length).toBe(1);
+  });
+
+  it('only cursor moves may scroll the view; a pinch / pan never does', () => {
+    const { g, follow } = rig();
+    g.down(1, 100, 100, 0);
+    g.move(1, 140, 100, 10);
+    g.up(1, 140, 100, 20);
+    expect(follow.every(Boolean)).toBe(true);
+    follow.length = 0;
+    g.down(2, 100, 100, 100);
+    g.down(3, 200, 100, 100);
+    g.move(3, 260, 100, 110);
+    g.move(3, 320, 100, 120);
+    expect(follow.length).toBeGreaterThan(0);
+    expect(follow.some(Boolean)).toBe(false);
+  });
+
+  it('a cursor left off-screen by a pan comes to the edge of the view before it moves', () => {
+    const { g, calls, view } = rig();
+    // the user panned: only x 600..1000 is visible now; the cursor (500) is off-screen
+    view.clamp = (p) => ({ x: Math.max(612, p.x), y: p.y });
+    g.down(1, 100, 100, 0);
+    g.move(1, 112, 100, 10); // +12 px at gain ~2.2
+    g.up(1, 112, 100, 20);
+    const move = calls.find((c) => c.startsWith('move@'))!;
+    const x = Number(/move@(\d+)/.exec(move)![1]);
+    expect(x).toBeGreaterThan(612); // moved on from the edge of the view, not from 500
   });
 });

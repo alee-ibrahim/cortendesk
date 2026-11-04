@@ -196,6 +196,9 @@ export function shouldOfferHomeScreen(
   return /iPhone|iPod/.test(nav.userAgent);
 }
 
+/** After the user pinches or pans, the view does not scroll after the trackpad cursor for this long. */
+const USER_PAN_HOLD_MS = 400;
+
 /** A phone or tablet: the primary pointer is a finger. */
 function coarsePointer(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -339,6 +342,9 @@ export class RdApp {
   private trackpadOut: TouchOutput | undefined;
   /** Trackpad mode's local cursor. */
   private tpCursor!: HTMLElement;
+  private tpCursorFade: ReturnType<typeof setTimeout> | undefined;
+  /** Last pinch / pan by the user: the view does not follow the cursor right after it. */
+  private lastUserPanAt = 0;
   /** Floating controls replacing the top bar and dock on phones and tablets. */
   private bar: MobileBar | undefined;
   private orientation: Orientation = 'portrait';
@@ -2834,6 +2840,7 @@ export class RdApp {
 
   /** Pinch: zoom about the fingers (client coordinates), then pan with them. */
   private zoomView(scale: number, center: Pt, pan: Pt): void {
+    this.lastUserPanAt = Date.now();
     const vp = this.el.viewport.getBoundingClientRect();
     this.view.zoomAt(scale, center.x - vp.left, center.y - vp.top);
     this.view.panBy(pan.x, pan.y);
@@ -2854,28 +2861,55 @@ export class RdApp {
       this.trackpadOut = out;
       this.trackpad = new TrackpadMapper(out, {
         content: () => this.contentClientRect(),
-        cursor: (p) => this.onTrackpadCursor(p),
+        cursor: (p, byCursor) => this.onTrackpadCursor(p, byCursor),
+        clampToView: (p) => this.clampToVisible(p),
       });
     }
     return this.trackpad;
   }
 
-  /** Trackpad cursor moved: keep it in view when zoomed in, and draw it. */
-  private onTrackpadCursor(p: Pt): void {
-    if (this.view.zoomed) {
+  /**
+   * Trackpad cursor moved. Only a move of the cursor itself scrolls a zoomed
+   * view, and only by the amount it went past the edge (no re-centring, so
+   * no jumping back and forth); never during or right after the user's own
+   * pinch / pan, which always wins.
+   */
+  private onTrackpadCursor(p: Pt, byCursor: boolean): void {
+    if (byCursor && this.view.zoomed && Date.now() - this.lastUserPanAt > USER_PAN_HOLD_MS) {
       const vp = this.el.viewport.getBoundingClientRect();
       const v = this.view.view;
       const lx = (p.x - vp.left - v.tx) / v.scale;
       const ly = (p.y - vp.top - v.ty) / v.scale;
-      if (this.view.ensureVisible(lx, ly, 0.5, 48)) this.applyView();
+      if (this.view.keepInView(lx, ly, 40)) this.applyView();
     }
-    this.drawTrackpadCursor();
+    this.drawTrackpadCursor(byCursor);
   }
 
-  private drawTrackpadCursor(): void {
+  /** The nearest on-screen point of the remote image (client coordinates), 12 px in from the edges. */
+  private clampToVisible(p: Pt): Pt {
+    const vp = this.el.viewport.getBoundingClientRect();
+    const c = this.contentClientRect();
+    const left = Math.max(vp.left, c.x) + 12;
+    const right = Math.min(vp.right, c.x + c.width) - 12;
+    const top = Math.max(vp.top, c.y) + 12;
+    const bottom = Math.min(vp.bottom, c.y + c.height) - 12;
+    if (left > right || top > bottom) return p;
+    return { x: Math.min(right, Math.max(left, p.x)), y: Math.min(bottom, Math.max(top, p.y)) };
+  }
+
+  private drawTrackpadCursor(moving = false): void {
     const on = this.inputMode === 'trackpad';
     this.tpCursor.hidden = !on;
     if (!on) return;
+    // Where the host draws its own cursor (in the video, or the remote-cursor
+    // overlay), ours is only a pointer while moving: once still, it fades so
+    // there are not two arrows side by side (the host's lags by the latency).
+    clearTimeout(this.tpCursorFade);
+    this.tpCursor.classList.remove('rd-faded');
+    const hostDrawsCursor = this.displays[this.current]?.cursorEmbedded === true || !this.el.remoteCursor.hidden;
+    if (hostDrawsCursor) {
+      this.tpCursorFade = setTimeout(() => this.tpCursor.classList.add('rd-faded'), moving ? 700 : 1500);
+    }
     let p = this.trackpad?.position();
     if (!p) {
       const c = this.contentClientRect();
