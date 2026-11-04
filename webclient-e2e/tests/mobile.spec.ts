@@ -46,7 +46,7 @@ test('two-finger tap and long press right-click', async ({ page }) => {
   await connect(page);
   const a = await clientFor(page, 400, 400);
   const b = await clientFor(page, 600, 400);
-  await touch(page, [['pointerdown', 1, a.x, a.y], ['pointerdown', 2, b.x, b.y], ['pointerup', 2, b.x, b.y], ['pointerup', 1, a.x, a.y]]);
+  await touch(page, [['pointerdown', 1, a.x, a.y], ['pointerdown', 2, b.x, b.y], ['pointerup', 2, b.x, b.y], ['pointerup', 1, a.x, a.y]], 0); // a tap: no gaps, slow engines would make it a hold
   let m = await mouse(page);
   expect(m.map((c) => [c[0], c[1]])).toEqual([[TYPE.MOVE, 0], [TYPE.DOWN, 2], [TYPE.UP, 2]]);
   await clearCmds(page);

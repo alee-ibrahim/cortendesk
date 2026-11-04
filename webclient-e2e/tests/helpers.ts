@@ -10,6 +10,8 @@ export async function connect(page: Page): Promise<void> {
   await expect(page.locator('#rd-root')).toHaveAttribute('data-state', 'streaming');
   // peerInfo is applied, the view laid out.
   await page.waitForFunction(() => document.querySelector('#rd-viewport')!.clientWidth > 0);
+  // The host's display list is in (input is only sent to an online display).
+  await page.waitForFunction(() => ((window as unknown as { __rdApp?: { displays?: unknown[] } }).__rdApp?.displays?.length ?? 0) > 0);
   await page.waitForTimeout(100);
   await clearCmds(page);
 }
@@ -49,6 +51,19 @@ export async function clientFor(page: Page, rx: number, ry: number): Promise<{ x
  * same in every engine this way). steps: [type, id, x, y].
  */
 export async function touch(page: Page, steps: [string, number, number, number][], gapMs = 16): Promise<void> {
+  if (!gapMs) {
+    // All at once, in one task: timing-sensitive gestures (taps) do not depend on the engine's speed.
+    await page.evaluate((steps) => {
+      const el = document.querySelector('#rd-viewport canvas')!;
+      for (const [type, id, x, y] of steps) {
+        el.dispatchEvent(new PointerEvent(type, {
+          pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y,
+          bubbles: true, cancelable: true, button: type === 'pointermove' ? -1 : 0, buttons: type === 'pointerup' ? 0 : 1,
+        }));
+      }
+    }, steps);
+    return;
+  }
   for (const [type, id, x, y] of steps) {
     await page.evaluate(([type, id, x, y]) => {
       const el = document.querySelector('#rd-viewport canvas')!;
