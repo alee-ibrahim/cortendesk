@@ -2,8 +2,8 @@
 // honoring the CortenDesk no-build-step rule for the app itself: built once on
 // the dev machine, the bundle is served statically by Laravel).
 //
-//   npm run build            one-shot production bundle
-//   npm run build -- --watch rebuild on change (dev only)
+//   pnpm build            one-shot production bundle
+//   pnpm build --watch   rebuild on change (dev only)
 //
 // Two independent entry points:
 //   src/ui/app.ts             -> ../public/rdclient/app.js       (main thread)

@@ -294,8 +294,8 @@ The browser client ships prebuilt in `public/rdclient/`. To hack on it:
 
 ```bash
 cd webclient
-npm install
-npm run build        # or: npm run typecheck
+pnpm install
+pnpm build        # or: pnpm typecheck
 ```
 
 ## License
