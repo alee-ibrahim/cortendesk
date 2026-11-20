@@ -1,7 +1,7 @@
 # Actions are pinned to commit SHAs (tag in the trailing comment); bump by hand.
 name: Security scan
 
-# composer audit, npm audit and gitleaks fail the build. Semgrep only
+# composer audit, pnpm audit and gitleaks fail the build. Semgrep only
 # reports: its findings go to the repository's code scanning tab, which only
 # people with write access can see.
 on:
@@ -31,7 +31,7 @@ jobs:
   # The web client's dependencies are all dev tooling except four runtime
   # libraries, and the built bundle is committed, so only the lockfile is
   # audited. Moderate and low advisories are left to Dependabot alerts.
-  npm-audit:
+  pnpm-audit:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -40,10 +40,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: webclient/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-      - run: npm audit --audit-level=high
+      - run: pnpm audit --audit-level=high
 
   gitleaks:
     runs-on: ubuntu-latest

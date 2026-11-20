@@ -15,7 +15,7 @@ NOTE ON PINNING
   the exact SHA.
 
 REGENERATE the TypeScript types after any re-vendor:
-  npm run gen        # runs protoc / ts-proto per buf.gen.yaml settings
+  pnpm gen        # runs protoc / ts-proto per buf.gen.yaml settings
   (see webclient/README.md → "Regenerating protobuf types")
 
 WEBRTC FIELDS (2026-11-01)
